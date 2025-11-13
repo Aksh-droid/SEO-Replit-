@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SEO Meta Tag Checker</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+    <header>
+        <h1>SEO Meta Tag Checker</h1>
+        <p>Enter a URL to analyze its SEO meta tags and see search / social previews.</p>
+    </header>
+
+    <section class="url-input">
+        <input id="urlInput" type="text" placeholder="https://example.com">
+        <button id="analyzeBtn">Analyze SEO</button>
+        <span id="status"></span>
+    </section>
+
+    <section id="results" class="hidden">
+        <h2>Results for <span id="resultUrl"></span></h2>
+
+        <div class="layout">
+            <div class="left-column">
+                <h3>Meta Tags</h3>
+                <table id="metaTable">
+                    <thead>
+                    <tr>
+                        <th>Tag</th>
+                        <th>Value</th>
+                    </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+
+                <h3>Feedback</h3>
+                <ul id="feedbackList"></ul>
+            </div>
+
+            <div class="right-column">
+                <h3>Google Search Preview</h3>
+                <div class="google-card">
+                    <div class="google-url" id="googleUrl"></div>
+                    <div class="google-title" id="googleTitle"></div>
+                    <div class="google-desc" id="googleDesc"></div>
+                </div>
+
+                <h3>Social Media Preview</h3>
+                <div class="social-card">
+                    <div class="social-image-wrapper">
+                        <img id="socialImage" alt="Social preview image">
+                    </div>
+                    <div class="social-content">
+                        <div class="social-domain" id="socialDomain"></div>
+                        <div class="social-title" id="socialTitle"></div>
+                        <div class="social-desc" id="socialDesc"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+    const analyzeBtn = document.getElementById("analyzeBtn");
+    const urlInput = document.getElementById("urlInput");
+    const statusEl = document.getElementById("status");
+    const resultsSection = document.getElementById("results");
+    const resultUrlEl = document.getElementById("resultUrl");
+    const metaTableBody = document.querySelector("#metaTable tbody");
+    const feedbackList = document.getElementById("feedbackList");
+
+    const googleUrlEl = document.getElementById("googleUrl");
+    const googleTitleEl = document.getElementById("googleTitle");
+    const googleDescEl = document.getElementById("googleDesc");
+
+    const socialImageEl = document.getElementById("socialImage");
+    const socialDomainEl = document.getElementById("socialDomain");
+    const socialTitleEl = document.getElementById("socialTitle");
+    const socialDescEl = document.getElementById("socialDesc");
+
+    analyzeBtn.addEventListener("click", () => {
+        const url = urlInput.value.trim();
+        if (!url) {
+            statusEl.textContent = "Please enter a URL.";
+            statusEl.className = "status error";
+            return;
+        }
+
+        statusEl.textContent = "Analyzing...";
+        statusEl.className = "status loading";
+
+        fetch("/analyze", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({url})
+        })
+            .then(res => res.json().then(data => ({ok: res.ok, data})))
+            .then(({ok, data}) => {
+                if (!ok) {
+                    throw new Error(data.error || "Unknown error");
+                }
+                renderResults(data);
+                statusEl.textContent = "Done!";
+                statusEl.className = "status ok";
+            })
+            .catch(err => {
+                statusEl.textContent = "Error: " + err.message;
+                statusEl.className = "status error";
+                resultsSection.classList.add("hidden");
+            });
+    });
+
+    function renderResults(data) {
+        resultsSection.classList.remove("hidden");
+        resultUrlEl.textContent = data.display_url || data.url;
+
+        // Meta table
+        metaTableBody.innerHTML = "";
+        for (const [key, value] of Object.entries(data.meta)) {
+            const row = document.createElement("tr");
+            const keyCell = document.createElement("td");
+            const valueCell = document.createElement("td");
+            keyCell.textContent = key;
+            valueCell.textContent = value || "(missing)";
+            row.appendChild(keyCell);
+            row.appendChild(valueCell);
+            metaTableBody.appendChild(row);
+        }
+
+        // Feedback
+        feedbackList.innerHTML = "";
+        data.feedback.forEach(item => {
+            const li = document.createElement("li");
+            li.textContent = item.message;
+            li.classList.add("feedback-" + item.level);
+            feedbackList.appendChild(li);
+        });
+
+        const meta = data.meta;
+
+        // Google preview
+        const title = meta["title"] || "(No title)";
+        const description = meta["description"] || "No meta description provided. Search engines may use on-page content instead.";
+        const displayUrl = data.display_url;
+
+        googleUrlEl.textContent = displayUrl;
+        googleTitleEl.textContent = title;
+        googleDescEl.textContent = description;
+
+        // Social preview (OG with fallback to Twitter/meta)
+        const ogTitle = meta["og:title"] || meta["twitter:title"] || title;
+        const ogDesc = meta["og:description"] || meta["twitter:description"] || description;
+        const ogImage = meta["og:image"] || meta["twitter:image"] || "";
+        const domain = (new URL(data.url)).hostname;
+
+        socialDomainEl.textContent = domain;
+        socialTitleEl.textContent = ogTitle;
+        socialDescEl.textContent = ogDesc;
+        if (ogImage) {
+            socialImageEl.src = ogImage;
+            socialImageEl.style.display = "block";
+        } else {
+            socialImageEl.style.display = "none";
+        }
+    }
+</script>
+</body>
+</html>
